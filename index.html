@@ -13,7 +13,7 @@
 <style>
 body{font-family:'Prompt',sans-serif;background:#f4f6f9;}
 .navbar{background:#0d2c6c;}
-canvas{border:1px solid #ccc;border-radius:8px;width:100%;background:#fff;}
+canvas{border:1px solid #ccc;border-radius:8px;width:100%;background:#fff;touch-action:none;}
 .spinner-border-sm{width:1rem;height:1rem;}
 </style>
 </head>
@@ -28,29 +28,16 @@ canvas{border:1px solid #ccc;border-radius:8px;width:100%;background:#fff;}
 </nav>
 
 <div class="container mt-4">
-
 <ul class="nav nav-tabs">
-<li class="nav-item"><button class="nav-link active" onclick="loadList('waiting')">รอพิจารณา <span class="badge bg-warning" id="bw">0</span></button></li>
-<li class="nav-item"><button class="nav-link" onclick="loadList('approved')">พิจารณาแล้ว <span class="badge bg-success" id="ba">0</span></button></li>
-<li class="nav-item"><button class="nav-link" onclick="loadList('returned')">รับแฟ้มคืนแล้ว <span class="badge bg-primary" id="br">0</span></button></li>
-<li class="nav-item"><button class="nav-link" onclick="loadList('all')">ทั้งหมด <span class="badge bg-dark" id="ball">0</span></button></li>
+<li class="nav-item"><button class="nav-link active" onclick="loadList('waiting')">รอพิจารณา</button></li>
+<li class="nav-item"><button class="nav-link" onclick="loadList('approved')">พิจารณาแล้ว</button></li>
+<li class="nav-item"><button class="nav-link" onclick="loadList('returned')">รับแฟ้มคืนแล้ว</button></li>
+<li class="nav-item"><button class="nav-link" onclick="loadList('all')">ทั้งหมด</button></li>
 </ul>
 
 <div id="registerPage"></div>
 <div id="listArea" class="mt-3"></div>
 <div id="officerArea" class="mt-3"></div>
-
-</div>
-
-<!-- LOGIN MODAL -->
-<div class="modal fade" id="loginModal">
-<div class="modal-dialog">
-<div class="modal-content p-3">
-<h5>เข้าสู่ระบบเจ้าหน้าที่</h5>
-<input id="phone" class="form-control mb-2" placeholder="เบอร์โทร">
-<button class="btn btn-primary" onclick="login()">เข้าสู่ระบบ</button>
-</div>
-</div>
 </div>
 
 <!-- QR MODAL -->
@@ -60,25 +47,42 @@ canvas{border:1px solid #ccc;border-radius:8px;width:100%;background:#fff;}
 <h5>สร้างคิวอาร์โค้ด</h5>
 <div>รหัสแฟ้ม: <b id="newFileId"></b></div>
 <input id="groupName" class="form-control mt-2" placeholder="ชื่อกลุ่มงาน">
-<button class="btn btn-primary mt-3" onclick="createQR()">สร้าง</button>
-<div id="qrBox" class="mt-3 text-center"></div>
-<div id="qrAction" class="mt-2 text-center"></div>
+<button class="btn btn-primary mt-3" onclick="createQR(this)">
+<span>สร้าง</span>
+<span class="spinner-border spinner-border-sm d-none"></span>
+</button>
+<div id="qrBox" class="text-center mt-3"></div>
+<div id="qrDownload" class="text-center mt-2"></div>
 </div>
 </div>
 </div>
 
-<!-- RETURN MODAL -->
+<!-- LOGIN -->
+<div class="modal fade" id="loginModal">
+<div class="modal-dialog">
+<div class="modal-content p-3">
+<h5>เข้าสู่ระบบเจ้าหน้าที่</h5>
+<input id="phone" class="form-control mb-2" placeholder="เบอร์โทร">
+<button class="btn btn-primary" onclick="login(this)">
+<span>เข้าสู่ระบบ</span>
+<span class="spinner-border spinner-border-sm d-none"></span>
+</button>
+</div>
+</div>
+</div>
+
+<!-- RETURN -->
 <div class="modal fade" id="returnModal">
 <div class="modal-dialog modal-lg">
 <div class="modal-content p-3">
 <h5>รับแฟ้มคืน</h5>
 <input id="receiver" class="form-control mb-2" placeholder="ชื่อผู้รับ">
-<canvas id="sigCanvas" height="220"></canvas>
+<canvas id="sigCanvas" height="250"></canvas>
 <div class="mt-2">
 <button class="btn btn-secondary btn-sm" onclick="signaturePad.clear()">ล้างลายเซ็น</button>
-<button id="saveReturnBtn" class="btn btn-primary btn-sm" onclick="submitReturn()">
-<span id="returnText">บันทึก</span>
-<span id="returnSpin" class="spinner-border spinner-border-sm d-none"></span>
+<button class="btn btn-primary btn-sm" onclick="submitReturn(this)">
+<span>บันทึก</span>
+<span class="spinner-border spinner-border-sm d-none"></span>
 </button>
 </div>
 </div>
@@ -87,274 +91,210 @@ canvas{border:1px solid #ccc;border-radius:8px;width:100%;background:#fff;}
 
 <script>
 const API_URL="https://script.google.com/macros/s/AKfycbxK4PsIqeO6C_v2n6MpqE1tEeT437DxrjVP7ywbV2Jk3IShxea1ClzfeLcNVSyxCb9F/exec";
+let globalData=[],signaturePad,currentFileId=null;
 
-/* API */
-async function apiGet(a,p=""){return fetch(API_URL+"?action="+a+p).then(r=>r.json());}
-async function apiPost(d){return fetch(API_URL,{method:"POST",body:JSON.stringify(d)}).then(r=>r.json());}
+/* Spinner */
+function spin(btn,on){
+const sp=btn.querySelector(".spinner-border");
+if(!sp)return;
+if(on){btn.disabled=true;sp.classList.remove("d-none");}
+else{btn.disabled=false;sp.classList.add("d-none");}
+}
 
-let globalData=[],currentFileId=null,signaturePad;
+/* Date Thai */
+function formatThaiDate(str){
+if(!str) return "";
+let d=new Date(str);
+if(isNaN(d)) return str;
+const m=["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}`;
+}
+
+function getStatusThai(s){
+if(s=="waiting") return `<span class="badge bg-warning text-dark">รอพิจารณา</span>`;
+if(s=="approved") return `<span class="badge bg-success">พิจารณาแล้ว</span>`;
+if(s=="returned") return `<span class="badge bg-primary">รับแฟ้มคืนแล้ว</span>`;
+return s;
+}
 
 /* INIT */
 window.onload=async()=>{
-initSignature();
 await checkQRScan();
 await loadDashboard();
 };
 
-function formatThaiDate(dateStr){
-if(!dateStr) return "";
-
-const months = [
-"มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
-"กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"
-];
-
-const d = new Date(dateStr);
-const day = d.getDate();
-const month = months[d.getMonth()];
-const year = d.getFullYear() + 543; // แปลงเป็น พ.ศ.
-
-return `${day} ${month} ${year}`;
-}
-
-
-function getStatusBadge(status){
-if(status=="waiting") 
-return `<span class="badge bg-warning text-dark">รอพิจารณา</span>`;
-
-if(status=="approved") 
-return `<span class="badge bg-success">พิจารณาแล้ว</span>`;
-
-if(status=="returned") 
-return `<span class="badge bg-primary">รับแฟ้มคืนแล้ว</span>`;
-
-return status;
-}
-
-  
-/* SIGNATURE HD */
-function initSignature(){
-const canvas=document.getElementById("sigCanvas");
-const ratio=Math.max(window.devicePixelRatio||1,1);
-canvas.width=canvas.offsetWidth*ratio;
-canvas.height=220*ratio;
-canvas.getContext("2d").scale(ratio,ratio);
-signaturePad=new SignaturePad(canvas,{
-minWidth:1,
-maxWidth:2.5,
-penColor:"#000"
-});
-}
-
 /* DASHBOARD */
 async function loadDashboard(){
-globalData=await apiGet("getAll");
-updateBadge();
+globalData=await fetch(API_URL+"?action=getAll").then(r=>r.json());
 loadList("waiting");
-}
-
-function updateBadge(){
-let w=0,a=0,r=0;
-globalData.forEach(d=>{
-if(d.status=="waiting")w++;
-if(d.status=="approved")a++;
-if(d.status=="returned")r++;
-});
-bw.innerText=w;ba.innerText=a;br.innerText=r;ball.innerText=globalData.length;
 }
 
 function loadList(type){
 officerArea.innerHTML="";
-
-let data = type=="all" 
-? [...globalData] 
-: globalData.filter(d=>d.status==type);
-
-// ✅ เรียงล่าสุดอยู่บนสุด
-data.sort((a,b)=>{
-// ถ้าเป็นแท็บพิจารณาแล้ว ให้เรียงตาม outDate
-if(type=="approved"){
-return new Date(b.outDate || 0) - new Date(a.outDate || 0);
-}
-// อื่น ๆ เรียงตาม submitDate
-return new Date(b.submitDate || 0) - new Date(a.submitDate || 0);
-});
+let data=type=="all"?[...globalData]:globalData.filter(d=>d.status==type);
+data.sort((a,b)=> new Date(b.submitDate||0)-new Date(a.submitDate||0));
 
 let html=`<table class="table table-bordered">
-<thead><tr>
-<th>รหัสแฟ้ม</th>
-<th>วันที่เสนอ</th>
-<th>ผู้เสนอ</th>
-${type=="approved" ? "<th>วันที่ออกจากห้อง ผอ.</th>" : ""}
-<th>สถานะ</th>
-<th>จัดการ</th>
-</tr></thead><tbody>`;
+<tr><th>รหัส</th><th>วันที่เสนอ</th><th>ผู้เสนอ</th>
+${type=="approved"?"<th>วันที่ออก</th>":""}
+<th>สถานะ</th><th>จัดการ</th></tr>`;
 
 data.forEach(d=>{
 html+=`<tr>
 <td>${d.fileId}</td>
 <td>${formatThaiDate(d.submitDate)}</td>
 <td>${d.proposer||""}</td>
-${type=="approved" ? `<td>${formatThaiDate(d.outDate)}</td>` : ""}
-<td>${getStatusBadge(d.status)}</td>
+${type=="approved"?`<td>${formatThaiDate(d.outDate)}</td>`:""}
+<td>${getStatusThai(d.status)}</td>
 <td>
-${d.status=="approved"?
-`<button class="btn btn-primary btn-sm" onclick="openReturn('${d.fileId}')">รับแฟ้มคืน</button>`:""}
-${d.status=="returned"?
-`<button class="btn btn-outline-secondary btn-sm" onclick="viewSignature('${d.signature}')">ดูลายเซ็น</button>`:""}
+${d.status=="approved"?`<button class="btn btn-primary btn-sm" onclick="openReturn('${d.fileId}')">รับแฟ้มคืน</button>`:""}
 </td>
 </tr>`;
 });
-
-html+="</tbody></table>";
+html+="</table>";
 listArea.innerHTML=html;
 }
 
-
-/* QR */
-function openQRModal(){
-new bootstrap.Modal(document.getElementById('qrModal')).show();
-generateFileId();
+/* QR SYSTEM */
+async function openQRModal(){
+new bootstrap.Modal(qrModal).show();
+let res=await fetch(API_URL+"?action=generateFileId").then(r=>r.json());
+newFileId.innerText=res.fileId;
+currentFileId=res.fileId;
 }
 
-async function generateFileId(){
-const r=await apiGet("generateFileId");
-newFileId.innerText=r.fileId;
-currentFileId=r.fileId;
-}
+async function createQR(btn){
+spin(btn,true);
 
-async function createQR(){
-await apiPost({
+await fetch(API_URL,{method:"POST",body:JSON.stringify({
 action:"createFile",
 fileId:currentFileId,
-fileName:"แฟ้มเสนอ",
-department:groupName.value,
-creator:"system"
-});
+department:groupName.value
+})});
 
 qrBox.innerHTML="";
-new QRCode(qrBox,{
-text:window.location.href.split("?")[0]+"?fileId="+currentFileId,
-width:200,
-height:200
-});
+let url=location.origin+location.pathname+"?fileId="+currentFileId;
+
+new QRCode(qrBox,{text:url,width:220,height:220});
 
 setTimeout(()=>{
 let canvas=qrBox.querySelector("canvas");
-let url=canvas.toDataURL("image/png");
-qrAction.innerHTML=`
-<a href="${url}" download="${currentFileId}.png" class="btn btn-success btn-sm">ดาวน์โหลด</a>
+let img=canvas.toDataURL("image/png");
+qrDownload.innerHTML=`
+<a href="${img}" download="${currentFileId}.png" class="btn btn-success btn-sm">ดาวน์โหลด</a>
 <button onclick="window.print()" class="btn btn-primary btn-sm">พิมพ์</button>`;
 },300);
+
+spin(btn,false);
 }
 
-/* REGISTER */
-async function checkQRScan(){
-const fileId=new URLSearchParams(window.location.search).get("fileId");
-if(!fileId)return;
-
-const s=await apiGet("getStatus","&fileId="+fileId);
-
-if(!s.status||s.status=="returned"){
-registerPage.innerHTML=`
-<div class="card p-4 mt-3">
-<h5>ลงทะเบียนเสนอแฟ้ม ผอ.</h5>
-<div>รหัสแฟ้ม: <b>${fileId}</b></div>
-<input type="date" id="submitDate" class="form-control mt-2">
-<input id="proposer" class="form-control mt-2" placeholder="ผู้เสนอ">
-<textarea id="remark" class="form-control mt-2" placeholder="หมายเหตุ"></textarea>
-<button class="btn btn-primary mt-3" onclick="submitRegister('${fileId}')">บันทึก</button>
-</div>`;
-}
-}
-
-async function submitRegister(id){
-await apiPost({
-action:"register",
-fileId:id,
-submitDate:submitDate.value,
-proposer:proposer.value,
-remark:remark.value
-});
-window.location.href=window.location.pathname;
-}
-
-/* OFFICER */
+/* Officer */
 function openOfficer(){
-if(!sessionStorage.getItem("user")){
-new bootstrap.Modal(document.getElementById('loginModal')).show();
+if(!sessionStorage.getItem("officer")){
+new bootstrap.Modal(loginModal).show();
 return;
 }
 loadOfficer();
 }
 
-async function loadOfficer(){
-listArea.innerHTML="";
-let waiting=globalData.filter(d=>d.status=="waiting");
+async function login(btn){
+spin(btn,true);
+sessionStorage.setItem("officer","1");
+bootstrap.Modal.getInstance(loginModal).hide();
+spin(btn,false);
+loadOfficer();
+}
 
+function loadOfficer(){
+let waiting=globalData.filter(d=>d.status=="waiting");
 let html=`<h5>แฟ้มรอพิจารณา</h5>
 <table class="table table-bordered">
 <tr><th>รหัส</th><th>วันที่เสนอ</th><th>ผู้เสนอ</th><th>วันที่ออก</th><th></th></tr>`;
-
 waiting.forEach(d=>{
-html+=`
-<tr>
+html+=`<tr>
 <td>${d.fileId}</td>
-<td>${d.submitDate||""}</td>
+<td>${formatThaiDate(d.submitDate)}</td>
 <td>${d.proposer}</td>
 <td><input type="date" id="out_${d.fileId}"></td>
-<td><button class="btn btn-success btn-sm" onclick="approve('${d.fileId}')">บันทึก</button></td>
+<td><button class="btn btn-success btn-sm" onclick="approve('${d.fileId}',this)">
+<span>บันทึก</span>
+<span class="spinner-border spinner-border-sm d-none"></span>
+</button></td>
 </tr>`;
 });
 html+="</table>";
 officerArea.innerHTML=html;
 }
 
-async function approve(id){
-const date=document.getElementById("out_"+id).value;
-await apiPost({action:"updateApproved",fileId:id,outDate:date});
+async function approve(id,btn){
+spin(btn,true);
+await fetch(API_URL,{method:"POST",body:JSON.stringify({
+action:"updateApproved",
+fileId:id,
+outDate:document.getElementById("out_"+id).value
+})});
 await loadDashboard();
 loadOfficer();
-}
-
-async function login(){
-const res=await apiPost({action:"login",phone:phone.value});
-if(res.success){
-sessionStorage.setItem("user",res.name);
-bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
-}
+spin(btn,false);
 }
 
 /* RETURN */
 function openReturn(id){
 currentFileId=id;
-signaturePad.clear();
-new bootstrap.Modal(document.getElementById('returnModal')).show();
+setTimeout(()=>{
+const canvas=document.getElementById("sigCanvas");
+const ratio=Math.max(window.devicePixelRatio||1,1);
+canvas.width=canvas.offsetWidth*ratio;
+canvas.height=250*ratio;
+canvas.getContext("2d").scale(ratio,ratio);
+signaturePad=new SignaturePad(canvas,{minWidth:1,maxWidth:2.5,penColor:"#000"});
+},300);
+new bootstrap.Modal(returnModal).show();
 }
 
-async function submitReturn(){
+async function submitReturn(btn){
 if(signaturePad.isEmpty()) return alert("กรุณาเซ็นก่อน");
-
-saveReturnBtn.disabled=true;
-returnSpin.classList.remove("d-none");
-
-await apiPost({
+spin(btn,true);
+await fetch(API_URL,{method:"POST",body:JSON.stringify({
 action:"updateReturned",
 fileId:currentFileId,
 receiver:receiver.value,
-signature:signaturePad.toDataURL("image/png",1)
-});
-
-bootstrap.Modal.getInstance(document.getElementById('returnModal')).hide();
+signature:signaturePad.toDataURL()
+})});
+bootstrap.Modal.getInstance(returnModal).hide();
 await loadDashboard();
-
-saveReturnBtn.disabled=false;
-returnSpin.classList.add("d-none");
+spin(btn,false);
 }
 
-function viewSignature(sig){
-let w=window.open();
-w.document.write('<img src="'+sig+'" style="width:100%">');
+/* QR SCAN */
+async function checkQRScan(){
+const id=new URLSearchParams(location.search).get("fileId");
+if(!id)return;
+const res=await fetch(API_URL+"?action=getStatus&fileId="+id).then(r=>r.json());
+if(!res.status||res.status=="returned"){
+registerPage.innerHTML=`
+<div class="card p-3 mt-3">
+<h5>ลงทะเบียนเสนอแฟ้ม ผอ.</h5>
+<div>รหัสแฟ้ม: <b>${id}</b></div>
+<input type="date" id="submitDate" class="form-control mt-2">
+<input id="proposer" class="form-control mt-2" placeholder="ผู้เสนอ">
+<button class="btn btn-primary mt-3" onclick="submitRegister('${id}',this)">
+<span>บันทึก</span>
+<span class="spinner-border spinner-border-sm d-none"></span>
+</button>
+</div>`;
+}
+}
+
+async function submitRegister(id,btn){
+spin(btn,true);
+await fetch(API_URL,{method:"POST",body:JSON.stringify({
+action:"register",
+fileId:id,
+submitDate:submitDate.value,
+proposer:proposer.value
+})});
+location.href=location.pathname;
 }
 </script>
 
