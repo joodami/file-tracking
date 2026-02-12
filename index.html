@@ -29,11 +29,35 @@ canvas{border:1px solid #ccc;border-radius:8px;width:100%;background:#fff;touch-
 
 <div class="container mt-4">
 <ul class="nav nav-tabs">
-<li class="nav-item"><button class="nav-link active" onclick="loadList('waiting')">รอพิจารณา</button></li>
-<li class="nav-item"><button class="nav-link" onclick="loadList('approved')">พิจารณาแล้ว</button></li>
-<li class="nav-item"><button class="nav-link" onclick="loadList('returned')">รับแฟ้มคืนแล้ว</button></li>
-<li class="nav-item"><button class="nav-link" onclick="loadList('all')">ทั้งหมด</button></li>
+<li class="nav-item">
+<button class="nav-link active" onclick="loadList('waiting')">
+รอพิจารณา 
+<span class="badge bg-warning text-dark ms-1" id="badge_waiting">0</span>
+</button>
+</li>
+
+<li class="nav-item">
+<button class="nav-link" onclick="loadList('approved')">
+พิจารณาแล้ว 
+<span class="badge bg-success ms-1" id="badge_approved">0</span>
+</button>
+</li>
+
+<li class="nav-item">
+<button class="nav-link" onclick="loadList('returned')">
+รับแฟ้มคืนแล้ว 
+<span class="badge bg-primary ms-1" id="badge_returned">0</span>
+</button>
+</li>
+
+<li class="nav-item">
+<button class="nav-link" onclick="loadList('all')">
+ทั้งหมด 
+<span class="badge bg-dark ms-1" id="badge_all">0</span>
+</button>
+</li>
 </ul>
+
 
 <div id="registerPage"></div>
 <div id="listArea" class="mt-3"></div>
@@ -126,9 +150,27 @@ await loadDashboard();
 /* DASHBOARD */
 async function loadDashboard(){
 globalData=await fetch(API_URL+"?action=getAll").then(r=>r.json());
+updateBadges(); // ✅ เพิ่มบรรทัดนี้
 loadList("waiting");
 }
 
+
+function updateBadges(){
+let w=0,a=0,r=0;
+
+globalData.forEach(d=>{
+if(d.status=="waiting") w++;
+if(d.status=="approved") a++;
+if(d.status=="returned") r++;
+});
+
+document.getElementById("badge_waiting").innerText=w;
+document.getElementById("badge_approved").innerText=a;
+document.getElementById("badge_returned").innerText=r;
+document.getElementById("badge_all").innerText=globalData.length;
+}
+
+  
 function loadList(type){
 officerArea.innerHTML="";
 let data=type=="all"?[...globalData]:globalData.filter(d=>d.status==type);
