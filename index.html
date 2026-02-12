@@ -165,9 +165,10 @@ return s;
 
 /* INIT */
 window.onload=async()=>{
-await checkQRScan();
-await loadDashboard();
+await loadDashboard();   // โหลดข้อมูลก่อน
+await checkQRScan();     // แล้วค่อยตรวจ scan
 };
+
 
 /* DASHBOARD */
 async function loadDashboard(){
@@ -332,10 +333,15 @@ spin(btn,false);
 
 /* QR SCAN */
 async function checkQRScan(){
+
 const id=new URLSearchParams(location.search).get("fileId");
-if(!id)return;
+if(!id) return;
+
 const res=await fetch(API_URL+"?action=getStatus&fileId="+id).then(r=>r.json());
-if(!res.status||res.status=="returned"){
+
+/* ยังไม่เคยลงทะเบียน หรือ รับคืนแล้ว → ลงทะเบียนใหม่ */
+if(!res.status || res.status=="returned"){
+
 registerPage.innerHTML=`
 <div class="card p-3 mt-3">
 <h5>ลงทะเบียนเสนอแฟ้ม ผอ.</h5>
@@ -347,8 +353,23 @@ registerPage.innerHTML=`
 <span class="spinner-border spinner-border-sm d-none"></span>
 </button>
 </div>`;
+
+return;
+}
+
+/* ถ้าสถานะ waiting */
+if(res.status=="waiting"){
+loadList("waiting");
+return;
+}
+
+/* ถ้าสถานะ approved */
+if(res.status=="approved"){
+loadList("approved");
+return;
 }
 }
+
 
 async function submitRegister(id,btn){
 spin(btn,true);
