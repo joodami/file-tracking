@@ -23,10 +23,12 @@ canvas{border:1px solid #ccc;border-radius:8px;width:100%;}
 <span class="navbar-brand">ระบบเสนอแฟ้มผู้อำนวยการ</span>
 <div>
 <button class="btn btn-light btn-sm me-2" onclick="openQRModal()">สร้างคิวอาร์โค้ด</button>
+<button id="loginBtn" class="btn btn-warning btn-sm" onclick="openLogin()">เข้าสู่ระบบเจ้าหน้าที่</button>
 </div>
 </nav>
 
 <div class="container mt-4">
+
 <ul class="nav nav-tabs">
 <li class="nav-item"><button class="nav-link active" onclick="loadList('waiting')">รอพิจารณา <span class="badge bg-warning" id="bw">0</span></button></li>
 <li class="nav-item"><button class="nav-link" onclick="loadList('approved')">พิจารณาแล้ว <span class="badge bg-success" id="ba">0</span></button></li>
@@ -34,39 +36,45 @@ canvas{border:1px solid #ccc;border-radius:8px;width:100%;}
 <li class="nav-item"><button class="nav-link" onclick="loadList('all')">ทั้งหมด <span class="badge bg-dark" id="ball">0</span></button></li>
 </ul>
 
-<div id="listArea" class="mt-3"></div>
 <div id="registerPage"></div>
+<div id="listArea" class="mt-3"></div>
+
 </div>
 
-<!-- ✅ QR MODAL (เพิ่มกลับมาแล้ว) -->
+<!-- LOGIN MODAL -->
+<div class="modal fade" id="loginModal">
+<div class="modal-dialog">
+<div class="modal-content p-3">
+<h5>เข้าสู่ระบบเจ้าหน้าที่</h5>
+<input id="phone" class="form-control mb-2" placeholder="เบอร์โทร">
+<button id="loginBtn2" class="btn btn-primary" onclick="login()">
+<span id="loginText">เข้าสู่ระบบ</span>
+<span id="loginSpin" class="spinner-border spinner-border-sm d-none"></span>
+</button>
+</div>
+</div>
+</div>
+
+<!-- QR MODAL -->
 <div class="modal fade" id="qrModal">
 <div class="modal-dialog">
 <div class="modal-content p-3">
 <h5>สร้างคิวอาร์โค้ด</h5>
+<div>รหัสแฟ้ม: <b id="newFileId"></b></div>
+<input id="groupName" class="form-control mt-2" placeholder="ชื่อกลุ่มงาน">
 
-<div class="mb-2">
-รหัสแฟ้ม: <b id="newFileId"></b>
-</div>
-
-<input id="groupName" class="form-control mb-2" placeholder="ชื่อกลุ่มงาน">
-
-<button id="qrBtn" class="btn btn-primary w-100" onclick="createQR()">
+<button id="createQRBtn" class="btn btn-primary mt-3" onclick="createQR()">
 <span id="qrText">สร้างคิวอาร์โค้ด</span>
 <span id="qrSpin" class="spinner-border spinner-border-sm d-none"></span>
 </button>
 
-<div id="qrBox" class="text-center mt-3"></div>
-
-<div id="qrActions" class="text-center mt-2 d-none">
-<button class="btn btn-success btn-sm" onclick="downloadQR()">ดาวน์โหลด</button>
-<button class="btn btn-secondary btn-sm" onclick="window.print()">พิมพ์</button>
-</div>
-
+<div id="qrBox" class="mt-3 text-center"></div>
+<div id="qrAction" class="mt-2 text-center"></div>
 </div>
 </div>
 </div>
 
-<!-- Return Modal -->
+<!-- RETURN MODAL -->
 <div class="modal fade" id="returnModal">
 <div class="modal-dialog modal-lg">
 <div class="modal-content p-3">
@@ -74,6 +82,7 @@ canvas{border:1px solid #ccc;border-radius:8px;width:100%;}
 <input id="receiver" class="form-control mb-2" placeholder="ชื่อผู้รับ">
 <canvas id="sigCanvas" height="150"></canvas>
 <button class="btn btn-secondary mt-2" onclick="signaturePad.clear()">ล้างลายเซ็น</button>
+
 <button id="returnBtn" class="btn btn-primary mt-2" onclick="submitReturn()">
 <span id="returnText">บันทึก</span>
 <span id="returnSpin" class="spinner-border spinner-border-sm d-none"></span>
@@ -92,12 +101,118 @@ let globalData=[],currentFileId=null,signaturePad;
 
 window.onload=async()=>{
 signaturePad=new SignaturePad(document.getElementById("sigCanvas"));
+await checkQRScan();
 await loadDashboard();
 }
 
+async function checkQRScan(){
+const params=new URLSearchParams(window.location.search);
+const fileId=params.get("fileId");
+if(!fileId)return;
+
+const s=await apiGet("getStatus","&fileId="+fileId);
+
+if(!s.status||s.status=="returned"){
+registerPage.innerHTML=`
+<div class="card p-4 mt-3">
+<h5>ลงทะเบียนเสนอแฟ้ม ผอ.</h5>
+<div>รหัสแฟ้ม: <b>${fileId}</b></div>
+<input id="proposer" class="form-control mt-2" placeholder="ผู้เสนอ">
+<textarea id="remark" class="form-control mt-2" placeholder="หมายเหตุ"></textarea>
+<button id="regBtn" class="btn btn-primary mt-3" onclick="submitRegister('${fileId}')">
+<span id="regText">ลงทะเบียน</span>
+<span id="regSpin" class="spinner-border spinner-border-sm d-none"></span>
+</button>
+</div>`;
+}
+}
+
+async function submitRegister(id){
+regBtn.disabled=true;
+regSpin.classList.remove("d-none");
+await apiPost({action:"register",fileId:id,proposer:proposer.value,remark:remark.value});
+alert("ลงทะเบียนสำเร็จ");
+window.location.href=window.location.pathname;
+}
+
+async function loadDashboard(){
+globalData=await apiGet("getAll");
+updateBadge();
+loadList("waiting");
+}
+
+function updateBadge(){
+let w=0,a=0,r=0;
+globalData.forEach(d=>{if(d.status=="waiting")w++;if(d.status=="approved")a++;if(d.status=="returned")r++;});
+bw.innerText=w;ba.innerText=a;br.innerText=r;ball.innerText=globalData.length;
+}
+
+function loadList(type){
+let data=type=="all"?globalData:globalData.filter(d=>d.status==type);
+let html=`<table class="table table-striped">
+<thead><tr>
+<th>รหัส</th><th>ผู้เสนอ</th><th>สถานะ</th><th>ผู้รับ</th><th>จัดการ</th>
+</tr></thead><tbody>`;
+data.forEach(d=>{
+html+=`<tr>
+<td>${d.fileId}</td>
+<td>${d.proposer||""}</td>
+<td>${d.status}</td>
+<td>${d.receiver||""}</td>
+<td>
+${d.status=="approved"?`<button class="btn btn-primary btn-sm" onclick="openReturn('${d.fileId}')">รับแฟ้มคืน</button>`:""}
+${d.signature?`<button class="btn btn-outline-secondary btn-sm" onclick="viewSig('${d.signature}')">ดูลายเซ็น</button>`:""}
+</td>
+</tr>`;
+});
+html+="</tbody></table>";
+listArea.innerHTML=html;
+}
+
+function openReturn(id){
+currentFileId=id;
+signaturePad.clear();
+new bootstrap.Modal(document.getElementById('returnModal')).show();
+}
+
+async function submitReturn(){
+returnBtn.disabled=true;
+returnSpin.classList.remove("d-none");
+await apiPost({
+action:"updateReturned",
+fileId:currentFileId,
+receiver:receiver.value,
+signature:signaturePad.toDataURL()
+});
+bootstrap.Modal.getInstance(document.getElementById('returnModal')).hide();
+await loadDashboard();
+returnBtn.disabled=false;
+returnSpin.classList.add("d-none");
+}
+
+function viewSig(sig){
+const w=window.open();
+w.document.write('<img src="'+sig+'" style="width:100%">');
+}
+
+function openLogin(){new bootstrap.Modal(document.getElementById('loginModal')).show();}
+
+async function login(){
+loginBtn2.disabled=true;
+loginSpin.classList.remove("d-none");
+const res=await apiPost({action:"login",phone:phone.value});
+if(res.success){
+sessionStorage.setItem("user",res.name);
+loginBtn.innerText=res.name;
+bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
+}
+loginBtn2.disabled=false;
+loginSpin.classList.add("d-none");
+}
+
 function openQRModal(){
-generateFileId();
 new bootstrap.Modal(document.getElementById('qrModal')).show();
+generateFileId();
 }
 
 async function generateFileId(){
@@ -107,9 +222,8 @@ currentFileId=r.fileId;
 }
 
 async function createQR(){
-qrBtn.disabled=true;
+createQRBtn.disabled=true;
 qrSpin.classList.remove("d-none");
-qrText.innerText="กำลังสร้าง...";
 
 await apiPost({
 action:"createFile",
@@ -126,51 +240,13 @@ width:200,
 height:200
 });
 
+qrAction.innerHTML=`
+<button class="btn btn-success btn-sm" onclick="window.print()">พิมพ์</button>
+<a class="btn btn-outline-primary btn-sm" href="${qrBox.querySelector('img').src}" download="qr.png">ดาวน์โหลด</a>
+`;
+
+createQRBtn.disabled=false;
 qrSpin.classList.add("d-none");
-qrText.innerText="สร้างสำเร็จ";
-qrActions.classList.remove("d-none");
-qrBtn.disabled=false;
-}
-
-function downloadQR(){
-const img=qrBox.querySelector("img");
-const link=document.createElement("a");
-link.href=img.src;
-link.download=currentFileId+".png";
-link.click();
-}
-
-async function loadDashboard(){
-globalData=await apiGet("getAll");
-updateBadge();
-loadList("waiting");
-}
-
-function updateBadge(){
-let w=0,a=0,r=0;
-globalData.forEach(d=>{
-if(d.status=="waiting")w++;
-if(d.status=="approved")a++;
-if(d.status=="returned")r++;
-});
-bw.innerText=w;ba.innerText=a;br.innerText=r;ball.innerText=globalData.length;
-}
-
-function loadList(type){
-let data=type=="all"?globalData:globalData.filter(d=>d.status==type);
-let html=`<table class="table table-striped">
-<thead><tr>
-<th>รหัส</th><th>ผู้เสนอ</th><th>สถานะ</th>
-</tr></thead><tbody>`;
-data.forEach(d=>{
-html+=`<tr>
-<td>${d.fileId}</td>
-<td>${d.proposer||""}</td>
-<td>${d.status}</td>
-</tr>`;
-});
-html+="</tbody></table>";
-listArea.innerHTML=html;
 }
 </script>
 
