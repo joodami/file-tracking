@@ -101,6 +101,29 @@ await checkQRScan();
 await loadDashboard();
 };
 
+function formatThaiDate(dateStr){
+if(!dateStr) return "";
+const d = new Date(dateStr);
+const day = String(d.getDate()).padStart(2,'0');
+const month = String(d.getMonth()+1).padStart(2,'0');
+const year = d.getFullYear();
+return `${day}/${month}/${year}`;
+}
+
+function getStatusBadge(status){
+if(status=="waiting") 
+return `<span class="badge bg-warning text-dark">รอพิจารณา</span>`;
+
+if(status=="approved") 
+return `<span class="badge bg-success">พิจารณาแล้ว</span>`;
+
+if(status=="returned") 
+return `<span class="badge bg-primary">รับแฟ้มคืนแล้ว</span>`;
+
+return status;
+}
+
+  
 /* SIGNATURE HD */
 function initSignature(){
 const canvas=document.getElementById("sigCanvas");
@@ -134,22 +157,31 @@ bw.innerText=w;ba.innerText=a;br.innerText=r;ball.innerText=globalData.length;
 
 function loadList(type){
 officerArea.innerHTML="";
+
 let data=type=="all"?globalData:globalData.filter(d=>d.status==type);
 
 let html=`<table class="table table-bordered">
 <thead><tr>
-<th>รหัสแฟ้ม</th><th>วันที่เสนอ</th><th>ผู้เสนอ</th><th>สถานะ</th><th>จัดการ</th>
+<th>รหัสแฟ้ม</th>
+<th>วันที่เสนอ</th>
+<th>ผู้เสนอ</th>
+${type=="approved" ? "<th>วันที่ออกจากห้อง ผอ.</th>" : ""}
+<th>สถานะ</th>
+<th>จัดการ</th>
 </tr></thead><tbody>`;
 
 data.forEach(d=>{
 html+=`<tr>
 <td>${d.fileId}</td>
-<td>${d.submitDate||""}</td>
+<td>${formatThaiDate(d.submitDate)}</td>
 <td>${d.proposer||""}</td>
-<td>${d.status}</td>
+${type=="approved" ? `<td>${formatThaiDate(d.outDate)}</td>` : ""}
+<td>${getStatusBadge(d.status)}</td>
 <td>
-${d.status=="approved"?`<button class="btn btn-primary btn-sm" onclick="openReturn('${d.fileId}')">รับแฟ้มคืน</button>`:""}
-${d.status=="returned"?`<button class="btn btn-outline-secondary btn-sm" onclick="viewSignature('${d.signature}')">ดูลายเซ็น</button>`:""}
+${d.status=="approved"?
+`<button class="btn btn-primary btn-sm" onclick="openReturn('${d.fileId}')">รับแฟ้มคืน</button>`:""}
+${d.status=="returned"?
+`<button class="btn btn-outline-secondary btn-sm" onclick="viewSignature('${d.signature}')">ดูลายเซ็น</button>`:""}
 </td>
 </tr>`;
 });
@@ -157,6 +189,7 @@ ${d.status=="returned"?`<button class="btn btn-outline-secondary btn-sm" onclick
 html+="</tbody></table>";
 listArea.innerHTML=html;
 }
+
 
 /* QR */
 function openQRModal(){
